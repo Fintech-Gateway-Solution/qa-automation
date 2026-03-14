@@ -15,8 +15,7 @@
 #     with:
 #       service: "auth"
 #       image-tag: dev-abc1234
-#     secrets:
-#       GHCR_PAT: ${{ secrets.GHCR_PAT }}
+#     secrets: inherit
 ##
 
 name: QA Gate
@@ -34,7 +33,7 @@ on:
         type: string
     secrets:
       GHCR_PAT:
-        required: true
+        required: false
 
 jobs:
   qa-gate:
@@ -48,14 +47,13 @@ jobs:
         with:
           repository: Fintech-Gateway-Solution/qa-automation
           ref: main
-          token: ${{ secrets.GHCR_PAT }}
 
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_PAT }}
+          password: ${{ secrets.GHCR_PAT || github.token }}
 
       - name: Override image for deployed service
         run: |
