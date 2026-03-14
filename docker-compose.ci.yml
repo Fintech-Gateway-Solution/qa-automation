@@ -1,0 +1,178 @@
+##
+# CI Test Environment — spins up the full fintech stack for pre-deploy QA testing.
+# Used by qa-gate.yml workflow. Containers are destroyed after each run.
+#
+# Total memory: ~1.5GB (fits in GitHub Actions 7GB runner)
+# Startup time: ~60-90s (DB + migrations + service health checks)
+##
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: fintech
+      POSTGRES_PASSWORD: ci-test-password
+      POSTGRES_DB: fintech
+    command: >
+      postgres
+        -c shared_buffers=64MB
+        -c effective_cache_size=128MB
+        -c max_connections=20
+        -c work_mem=2MB
+        -c wal_buffers=2MB
+    tmpfs:
+      - /dev/shm:size=128M
+    healthcheck:
+      test: pg_isready -U fintech
+      interval: 3s
+      timeout: 2s
+      retries: 10
+    ports:
+      - "5432:5432"
+    mem_limit: 256m
+
+  auth:
+    image: ghcr.io/fintech-gateway-solution/auth:dev-latest
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: "3001"
+      HOST: 0.0.0.0
+      NODE_ENV: production
+      DATABASE_URL: postgres://fintech:ci-test-password@db:5432/fintech
+      JWT_SECRET: ci-jwt-secret-for-testing-only
+      INTERNAL_API_KEY: ci-internal-api-key
+      CORS_ORIGINS: http://localhost:8080
+      COOKIE_SECURE: "false"
+      COOKIE_SAMESITE: lax
+      FRONTEND_URL: http://localhost:8080
+      RUN_MIGRATIONS: "true"
+      RESEND_API_KEY: ""
+      EMAIL_FROM: noreply@test.local
+      NODE_OPTIONS: --max-old-space-size=192
+    healthcheck:
+      test: wget -q --spider http://127.0.0.1:3001/api/v1/health || exit 1
+      interval: 5s
+      timeout: 3s
+      retries: 15
+      start_period: 30s
+    ports:
+      - "3001:3001"
+    mem_limit: 192m
+
+  api:
+    image: ghcr.io/fintech-gateway-solution/dashboard/api:dev-latest
+    depends_on:
+      db:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+    environment:
+      PORT: "3000"
+      HOST: 0.0.0.0
+      NODE_ENV: production
+      DATABASE_URL: postgres://fintech:ci-test-password@db:5432/fintech
+      TENANT_MODE: header
+      DEFAULT_TENANT_ID: "00000000-0000-0000-0000-000000000001"
+      JWT_SECRET: ci-jwt-secret-for-testing-only
+      AUTH_SERVICE_URL: http://auth:3001/api/v1
+      INTERNAL_API_KEY: ci-internal-api-key
+      CORS_ORIGINS: http://localhost:8080
+      RUN_MIGRATIONS: "true"
+      NODE_OPTIONS: --max-old-space-size=192
+    healthcheck:
+      test: wget -q --spider http://127.0.0.1:3000/api/v1/health || exit 1
+      interval: 5s
+      timeout: 3s
+      retries: 15
+      start_period: 30s
+    ports:
+      - "3000:3000"
+    mem_limit: 256m
+
+  sendpayment:
+    image: ghcr.io/fintech-gateway-solution/sendpayment:dev-latest
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: "3002"
+      HOST: 0.0.0.0
+      NODE_ENV: production
+      DATABASE_URL: postgres://fintech:ci-test-password@db:5432/fintech
+      JWT_SECRET: ci-jwt-secret-for-testing-only
+      INTERNAL_API_KEY: ci-internal-api-key
+      CORS_ORIGINS: http://localhost:8080
+      RUN_MIGRATIONS: "true"
+      NODE_OPTIONS: --max-old-space-size=192
+    healthcheck:
+      test: wget -q --spider http://127.0.0.1:3002/api/v1/health || exit 1
+      interval: 5s
+      timeout: 3s
+      retries: 15
+      start_period: 30s
+    ports:
+      - "3002:3002"
+    mem_limit: 192m
+
+  receivepayment:
+    image: ghcr.io/fintech-gateway-solution/receivepayment:dev-latest
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: "3003"
+      HOST: 0.0.0.0
+      NODE_ENV: production
+      DATABASE_URL: postgres://fintech:ci-test-password@db:5432/fintech
+      JWT_SECRET: ci-jwt-secret-for-testing-only
+      INTERNAL_API_KEY: ci-internal-api-key
+      CORS_ORIGINS: http://localhost:8080
+      ENABLE_SWAGGER: "false"
+      RUN_MIGRATIONS: "true"
+      NODE_OPTIONS: --max-old-space-size=192
+    healthcheck:
+      test: wget -q --spider http://127.0.0.1:3003/api/v1/health || exit 1
+      interval: 5s
+      timeout: 3s
+      retries: 15
+      start_period: 30s
+    ports:
+      - "3003:3003"
+    mem_limit: 192m
+
+  products:
+    image: ghcr.io/fintech-gateway-solution/products:dev-latest
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: "3004"
+      HOST: 0.0.0.0
+      NODE_ENV: production
+      DATABASE_URL: postgres://fintech:ci-test-password@db:5432/fintech
+      JWT_SECRET: ci-jwt-secret-for-testing-only
+      CORS_ORIGINS: http://localhost:8080
+      RUN_MIGRATIONS: "true"
+      NODE_OPTIONS: --max-old-space-size=192
+    healthcheck:
+      test: wget -q --spider http://127.0.0.1:3004/api/v1/health || exit 1
+      interval: 5s
+      timeout: 3s
+      retries: 15
+      start_period: 30s
+    ports:
+      - "3004:3004"
+    mem_limit: 192m
+
+  web:
+    image: ghcr.io/fintech-gateway-solution/dashboard/web:dev-latest
+    depends_on:
+      - api
+      - auth
+    environment:
+      DOMAIN_NAME: localhost
+    ports:
+      - "8080:80"
+    mem_limit: 64m

@@ -1,0 +1,162 @@
+##
+# Reusable QA Gate Workflow
+#
+# Called by each service repo's deploy-dev.yml BEFORE deploying to dev EC2.
+# Spins up the full service stack in the CI runner using docker-compose.ci.yml,
+# overrides the image for the service being deployed with the newly built tag,
+# runs Playwright smoke tests, and tears everything down.
+#
+# If tests fail, the calling workflow's deploy job is blocked.
+#
+# Usage in deploy-dev.yml:
+#   qa-gate:
+#     needs: build-and-push
+#     uses: Fintech-Gateway-Solution/qa-automation/.github/workflows/qa-gate.yml@main
+#     with:
+#       service: "auth"
+#       image-tag: dev-abc1234
+#     secrets:
+#       GHCR_PAT: ${{ secrets.GHCR_PAT }}
+##
+
+name: QA Gate
+
+on:
+  workflow_call:
+    inputs:
+      service:
+        description: 'Service being deployed (auth, dashboard, sendpayment, receivepayment, products, pos-backend)'
+        required: true
+        type: string
+      image-tag:
+        description: 'Docker image tag for the newly built service (e.g., dev-abc1234)'
+        required: true
+        type: string
+    secrets:
+      GHCR_PAT:
+        required: true
+
+jobs:
+  qa-gate:
+    name: "QA Gate (${{ inputs.service }})"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout qa-automation repo
+        uses: actions/checkout@v4
+        with:
+          repository: Fintech-Gateway-Solution/qa-automation
+          ref: main
+          token: ${{ secrets.GHCR_PAT }}
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Override image for deployed service
+        run: |
+          SERVICE="${{ inputs.service }}"
+          TAG="${{ inputs.image-tag }}"
+          echo "🔄 Overriding $SERVICE image to tag: $TAG"
+
+          case "$SERVICE" in
+            auth)
+              sed -i "s|auth:dev-latest|auth:${TAG}|" docker-compose.ci.yml
+              ;;
+            dashboard)
+              sed -i "s|dashboard/api:dev-latest|dashboard/api:${TAG}|" docker-compose.ci.yml
+              sed -i "s|dashboard/web:dev-latest|dashboard/web:${TAG}|" docker-compose.ci.yml
+              ;;
+            sendpayment)
+              sed -i "s|sendpayment:dev-latest|sendpayment:${TAG}|" docker-compose.ci.yml
+              ;;
+            receivepayment)
+              sed -i "s|receivepayment:dev-latest|receivepayment:${TAG}|" docker-compose.ci.yml
+              ;;
+            products)
+              sed -i "s|products:dev-latest|products:${TAG}|" docker-compose.ci.yml
+              ;;
+            pos-backend)
+              echo "⚠️ POS backend not yet in CI compose — skipping override"
+              ;;
+            *)
+              echo "⚠️ Unknown service: $SERVICE"
+              ;;
+          esac
+
+          echo "📋 Updated docker-compose.ci.yml images:"
+          grep "image:" docker-compose.ci.yml
+
+      - name: Pull Docker images
+        run: docker compose -f docker-compose.ci.yml pull
+
+      - name: Start service stack
+        run: |
+          docker compose -f docker-compose.ci.yml up -d
+          echo "⏳ Waiting for all services to become healthy..."
+
+      - name: Wait for services to be healthy
+        run: |
+          MAX_WAIT=120
+          INTERVAL=5
+          ELAPSED=0
+          REQUIRED_HEALTHY=6  # db, auth, api, sendpayment, receivepayment, products
+
+          while [ "$ELAPSED" -lt "$MAX_WAIT" ]; do
+            HEALTHY=$(docker compose -f docker-compose.ci.yml ps --format json 2>/dev/null | jq -s '[.[] | select(.Health == "healthy")] | length' 2>/dev/null || echo "0")
+            echo "  [$ELAPSED/${MAX_WAIT}s] $HEALTHY/$REQUIRED_HEALTHY services healthy"
+
+            if [ "$HEALTHY" -ge "$REQUIRED_HEALTHY" ]; then
+              echo "✅ All services healthy!"
+              docker compose -f docker-compose.ci.yml ps
+              break
+            fi
+
+            sleep "$INTERVAL"
+            ELAPSED=$((ELAPSED + INTERVAL))
+          done
+
+          if [ "$ELAPSED" -ge "$MAX_WAIT" ]; then
+            echo "❌ Services failed to become healthy within ${MAX_WAIT}s"
+            docker compose -f docker-compose.ci.yml ps
+            echo ""
+            echo "=== Container Logs ==="
+            docker compose -f docker-compose.ci.yml logs --tail 20
+            exit 1
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run smoke tests
+        run: npx playwright test --project=smoke
+        env:
+          BASE_URL: http://localhost:8080
+          CI: true
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-gate-report-${{ inputs.service }}-${{ github.run_number }}
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Teardown
+        if: always()
+        run: |
+          docker compose -f docker-compose.ci.yml down -v --remove-orphans
+          echo "🧹 All containers and volumes removed"
