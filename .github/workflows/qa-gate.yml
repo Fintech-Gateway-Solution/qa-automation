@@ -94,32 +94,40 @@ jobs:
 
       - name: Start service stack
         run: |
-          # Start DB first and wait for it to be healthy
+          # Stage 1: Start DB and wait for healthy
           docker compose -f docker-compose.ci.yml up -d db
-          echo "⏳ Waiting for DB to be healthy..."
+          echo "⏳ Waiting for DB..."
           for i in $(seq 1 30); do
             if docker compose -f docker-compose.ci.yml ps db --format json 2>/dev/null | jq -e 'select(.Health == "healthy")' > /dev/null 2>&1; then
               echo "✅ DB healthy after ~$((i*2))s"
               break
             fi
-            [ "$i" = "30" ] && echo "⚠️ DB still not healthy after 60s" && docker compose -f docker-compose.ci.yml logs db --tail 10
+            [ "$i" = "30" ] && echo "⚠️ DB timeout" && docker compose -f docker-compose.ci.yml logs db --tail 10
             sleep 2
           done
 
-          # Start all remaining services (|| true to not fail if a container exits during startup)
-          docker compose -f docker-compose.ci.yml up -d 2>&1 || true
-          echo "⏳ Checking initial container state..."
-          docker compose -f docker-compose.ci.yml ps
-          # Dump logs for any crashed containers
-          for svc in auth api sendpayment receivepayment products web; do
-            STATE=$(docker compose -f docker-compose.ci.yml ps $svc --format json 2>/dev/null | jq -r '.State' 2>/dev/null || echo "unknown")
-            if [ "$STATE" = "exited" ]; then
-              echo "⚠️ $svc exited — logs:"
-              docker compose -f docker-compose.ci.yml logs $svc --tail 30
-              echo "Restarting $svc..."
-              docker compose -f docker-compose.ci.yml up -d $svc 2>&1 || true
+          # Stage 2: Start AUTH first (runs migrations that create shared schema)
+          echo "⏳ Starting auth service (runs migrations)..."
+          docker compose -f docker-compose.ci.yml up -d auth
+          for i in $(seq 1 60); do
+            if docker compose -f docker-compose.ci.yml ps auth --format json 2>/dev/null | jq -e 'select(.Health == "healthy")' > /dev/null 2>&1; then
+              echo "✅ Auth healthy after ~$((i*3))s (migrations complete)"
+              break
             fi
+            STATE=$(docker compose -f docker-compose.ci.yml ps auth --format json 2>/dev/null | jq -r '.State' 2>/dev/null || echo "unknown")
+            if [ "$STATE" = "exited" ]; then
+              echo "⚠️ Auth exited — logs:"
+              docker compose -f docker-compose.ci.yml logs auth --tail 20
+              echo "Restarting auth..."
+              docker compose -f docker-compose.ci.yml up -d auth 2>&1 || true
+            fi
+            sleep 3
           done
+
+          # Stage 3: Start remaining services (auth schema exists, safe for other migrations)
+          echo "⏳ Starting remaining services..."
+          docker compose -f docker-compose.ci.yml up -d 2>&1 || true
+          docker compose -f docker-compose.ci.yml ps
 
       - name: Wait for services to be healthy
         run: |
