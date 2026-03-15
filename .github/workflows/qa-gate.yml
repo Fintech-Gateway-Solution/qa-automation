@@ -8,14 +8,9 @@
 #
 # If tests fail, the calling workflow's deploy job is blocked.
 #
-# Usage in deploy-dev.yml:
-#   qa-gate:
-#     needs: build-and-push
-#     uses: Fintech-Gateway-Solution/qa-automation/.github/workflows/qa-gate.yml@main
-#     with:
-#       service: "auth"
-#       image-tag: dev-abc1234
-#     secrets: inherit
+# Migration strategy: Services share one Postgres DB but have independent drizzle
+# migration journals. We start services sequentially and clear the shared
+# __drizzle_migrations table between each to prevent cross-service conflicts.
 ##
 
 name: QA Gate
@@ -59,7 +54,7 @@ jobs:
         run: |
           SERVICE="${{ inputs.service }}"
           TAG="${{ inputs.image-tag }}"
-          echo "🔄 Overriding $SERVICE image to tag: $TAG"
+          echo "Overriding $SERVICE image to tag: $TAG"
 
           case "$SERVICE" in
             auth)
@@ -79,81 +74,91 @@ jobs:
               sed -i "s|products:dev-latest|products:${TAG}|" docker-compose.ci.yml
               ;;
             pos-backend)
-              echo "⚠️ POS backend not yet in CI compose — skipping override"
+              echo "POS backend not yet in CI compose — skipping override"
               ;;
             *)
-              echo "⚠️ Unknown service: $SERVICE"
+              echo "Unknown service: $SERVICE"
               ;;
           esac
 
-          echo "📋 Updated docker-compose.ci.yml images:"
+          echo "Updated docker-compose.ci.yml images:"
           grep "image:" docker-compose.ci.yml
 
       - name: Pull Docker images
         run: docker compose -f docker-compose.ci.yml pull
 
-      - name: Start service stack
+      - name: Start service stack (sequential to avoid migration conflicts)
         run: |
-          # Stage 1: Start DB and wait for healthy
-          docker compose -f docker-compose.ci.yml up -d db
-          echo "⏳ Waiting for DB..."
-          for i in $(seq 1 30); do
-            if docker compose -f docker-compose.ci.yml ps db --format json 2>/dev/null | jq -e 'select(.Health == "healthy")' > /dev/null 2>&1; then
-              echo "✅ DB healthy after ~$((i*2))s"
-              break
-            fi
-            [ "$i" = "30" ] && echo "⚠️ DB timeout" && docker compose -f docker-compose.ci.yml logs db --tail 10
-            sleep 2
-          done
+          COMPOSE="docker compose -f docker-compose.ci.yml"
+          DB_URL="postgres://fintech:ci-test-password@localhost:5432/fintech"
 
-          # Stage 2: Start AUTH first (runs migrations that create shared schema)
-          echo "⏳ Starting auth service (runs migrations)..."
-          docker compose -f docker-compose.ci.yml up -d auth
-          for i in $(seq 1 60); do
-            if docker compose -f docker-compose.ci.yml ps auth --format json 2>/dev/null | jq -e 'select(.Health == "healthy")' > /dev/null 2>&1; then
-              echo "✅ Auth healthy after ~$((i*3))s (migrations complete)"
-              break
-            fi
-            STATE=$(docker compose -f docker-compose.ci.yml ps auth --format json 2>/dev/null | jq -r '.State' 2>/dev/null || echo "unknown")
-            if [ "$STATE" = "exited" ]; then
-              echo "⚠️ Auth exited — logs:"
-              docker compose -f docker-compose.ci.yml logs auth --tail 20
-              echo "Restarting auth..."
-              docker compose -f docker-compose.ci.yml up -d auth 2>&1 || true
-            fi
-            sleep 3
-          done
+          wait_healthy() {
+            local SVC=$1 MAX=$2 INTERVAL=${3:-3}
+            for i in $(seq 1 $((MAX / INTERVAL))); do
+              if $COMPOSE ps "$SVC" --format json 2>/dev/null | jq -e 'select(.Health == "healthy")' > /dev/null 2>&1; then
+                echo "  $SVC healthy after ~$((i * INTERVAL))s"
+                return 0
+              fi
+              STATE=$($COMPOSE ps "$SVC" --format json 2>/dev/null | jq -r '.State' 2>/dev/null || echo "unknown")
+              if [ "$STATE" = "exited" ]; then
+                echo "  $SVC exited — restarting..."
+                $COMPOSE logs "$SVC" --tail 10
+                $COMPOSE up -d "$SVC" 2>&1 || true
+              fi
+              sleep "$INTERVAL"
+            done
+            echo "  $SVC failed to become healthy within ${MAX}s"
+            $COMPOSE logs "$SVC" --tail 20
+            return 1
+          }
 
-          # Stage 3: Start remaining services WITHOUT restarting auth (which is already healthy)
-          echo "⏳ Starting remaining services..."
-          docker compose -f docker-compose.ci.yml up -d --no-recreate 2>&1 || true
-          docker compose -f docker-compose.ci.yml ps
+          clear_migrations() {
+            # Clear shared drizzle migration tracking so next service starts from 0
+            docker run --rm --network host postgres:16-alpine \
+              psql "$DB_URL" -c 'DELETE FROM drizzle."__drizzle_migrations"' 2>/dev/null || true
+          }
 
-      - name: Wait for services to be healthy
+          # Stage 1: DB
+          echo "=== Stage 1: Starting database ==="
+          $COMPOSE up -d db
+          wait_healthy db 60 2
+
+          # Stage 2: Auth (creates shared schema + tenants table)
+          echo "=== Stage 2: Starting auth (runs migrations) ==="
+          $COMPOSE up -d auth
+          wait_healthy auth 180 3
+
+          # Stage 3: Dashboard API (clear migration table first)
+          echo "=== Stage 3: Starting dashboard API ==="
+          clear_migrations
+          $COMPOSE up -d api
+          wait_healthy api 120 3
+
+          # Stage 4: Products + payment services + web (clear migration table first)
+          echo "=== Stage 4: Starting remaining services ==="
+          clear_migrations
+          $COMPOSE up -d products sendpayment receivepayment web
+          echo "Waiting 15s for services to initialize..."
+          sleep 15
+
+          # Final status
+          $COMPOSE ps
+
+      - name: Wait for all services to be healthy
         run: |
-          MAX_WAIT=180
+          MAX_WAIT=120
           INTERVAL=5
           ELAPSED=0
           REQUIRED_HEALTHY=6  # db, auth, api, sendpayment, receivepayment, products
 
           while [ "$ELAPSED" -lt "$MAX_WAIT" ]; do
             HEALTHY=$(docker compose -f docker-compose.ci.yml ps --format json 2>/dev/null | jq -s '[.[] | select(.Health == "healthy")] | length' 2>/dev/null || echo "0")
-            EXITED=$(docker compose -f docker-compose.ci.yml ps --format json 2>/dev/null | jq -s '[.[] | select(.State == "exited")] | length' 2>/dev/null || echo "0")
-            echo "  [$ELAPSED/${MAX_WAIT}s] $HEALTHY/$REQUIRED_HEALTHY healthy, $EXITED exited"
+            echo "  [$ELAPSED/${MAX_WAIT}s] $HEALTHY/$REQUIRED_HEALTHY healthy"
 
             if [ "$HEALTHY" -ge "$REQUIRED_HEALTHY" ]; then
-              echo "✅ All services healthy!"
+              echo "All services healthy!"
               docker compose -f docker-compose.ci.yml ps
               break
-            fi
-
-            # If any service exited, dump logs and retry
-            if [ "$EXITED" -gt "0" ]; then
-              echo "⚠️ Containers exited — dumping logs:"
-              docker compose -f docker-compose.ci.yml logs --tail 15
-              echo ""
-              echo "Restarting exited containers..."
-              docker compose -f docker-compose.ci.yml up -d
             fi
 
             sleep "$INTERVAL"
@@ -161,11 +166,11 @@ jobs:
           done
 
           if [ "$ELAPSED" -ge "$MAX_WAIT" ]; then
-            echo "❌ Services failed to become healthy within ${MAX_WAIT}s"
+            echo "Services failed to become healthy within ${MAX_WAIT}s"
             docker compose -f docker-compose.ci.yml ps
             echo ""
-            echo "=== All Container Logs ==="
-            docker compose -f docker-compose.ci.yml logs --tail 50
+            echo "=== Container Logs ==="
+            docker compose -f docker-compose.ci.yml logs --tail 30
             exit 1
           fi
 
@@ -199,4 +204,3 @@ jobs:
         if: always()
         run: |
           docker compose -f docker-compose.ci.yml down -v --remove-orphans
-          echo "🧹 All containers and volumes removed"

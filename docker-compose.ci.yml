@@ -2,8 +2,9 @@
 # CI Test Environment — spins up the full fintech stack for pre-deploy QA testing.
 # Used by qa-gate.yml workflow. Containers are destroyed after each run.
 #
-# Total memory: ~1.5GB (fits in GitHub Actions 7GB runner)
-# Startup time: ~60-90s (DB + migrations + service health checks)
+# IMPORTANT: Services share a single Postgres DB but use independent drizzle
+# migration journals. The qa-gate.yml workflow clears the migration tracking
+# table between service startups to prevent cross-service migration conflicts.
 ##
 
 services:
@@ -29,7 +30,6 @@ services:
       retries: 10
     ports:
       - "5432:5432"
-    # mem_limit: 256m
 
   auth:
     image: ghcr.io/fintech-gateway-solution/auth:dev-latest
@@ -59,7 +59,6 @@ services:
       start_period: 30s
     ports:
       - "3001:3001"
-    # mem_limit: 192m
 
   api:
     image: ghcr.io/fintech-gateway-solution/dashboard/api:dev-latest
@@ -87,7 +86,6 @@ services:
       start_period: 30s
     ports:
       - "3000:3000"
-    # mem_limit: 256m
 
   sendpayment:
     image: ghcr.io/fintech-gateway-solution/sendpayment:dev-latest
@@ -112,7 +110,6 @@ services:
       start_period: 30s
     ports:
       - "3002:3002"
-    # mem_limit: 192m
 
   receivepayment:
     image: ghcr.io/fintech-gateway-solution/receivepayment:dev-latest
@@ -138,7 +135,6 @@ services:
       start_period: 30s
     ports:
       - "3003:3003"
-    # mem_limit: 192m
 
   products:
     image: ghcr.io/fintech-gateway-solution/products:dev-latest
@@ -154,7 +150,7 @@ services:
       CORS_ORIGINS: http://localhost:8080
       RUN_MIGRATIONS: "true"
       NODE_OPTIONS: --max-old-space-size=192
-    # Override CMD to skip strict migration validation in CI (shared DB may have stale journal)
+    # Override CMD: skip strict migration validation in CI (shared DB journal mismatch)
     command: ["sh", "-c", "node pre-migrate.mjs && npx drizzle-kit migrate 2>&1 || echo 'WARN: drizzle-kit migration issue'; exec node dist/index.js"]
     healthcheck:
       test: wget -q --spider http://127.0.0.1:3004/api/v1/health || exit 1
@@ -164,7 +160,6 @@ services:
       start_period: 30s
     ports:
       - "3004:3004"
-    # mem_limit: 192m
 
   web:
     image: ghcr.io/fintech-gateway-solution/dashboard/web:dev-latest
@@ -174,4 +169,3 @@ services:
       DOMAIN_NAME: localhost
     ports:
       - "8080:80"
-    # mem_limit: 64m
