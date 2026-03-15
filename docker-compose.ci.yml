@@ -66,8 +66,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      auth:
-        condition: service_healthy
     environment:
       PORT: "3000"
       HOST: 0.0.0.0
@@ -170,7 +168,6 @@ services:
     image: ghcr.io/fintech-gateway-solution/dashboard/web:dev-latest
     depends_on:
       - api
-      - auth
     environment:
       DOMAIN_NAME: localhost
     ports:
