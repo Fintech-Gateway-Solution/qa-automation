@@ -29,7 +29,7 @@ services:
       retries: 10
     ports:
       - "5432:5432"
-    mem_limit: 256m
+    # mem_limit: 256m
 
   auth:
     image: ghcr.io/fintech-gateway-solution/auth:dev-latest
@@ -59,7 +59,7 @@ services:
       start_period: 30s
     ports:
       - "3001:3001"
-    mem_limit: 192m
+    # mem_limit: 192m
 
   api:
     image: ghcr.io/fintech-gateway-solution/dashboard/api:dev-latest
@@ -89,7 +89,7 @@ services:
       start_period: 30s
     ports:
       - "3000:3000"
-    mem_limit: 256m
+    # mem_limit: 256m
 
   sendpayment:
     image: ghcr.io/fintech-gateway-solution/sendpayment:dev-latest
@@ -114,7 +114,7 @@ services:
       start_period: 30s
     ports:
       - "3002:3002"
-    mem_limit: 192m
+    # mem_limit: 192m
 
   receivepayment:
     image: ghcr.io/fintech-gateway-solution/receivepayment:dev-latest
@@ -140,7 +140,7 @@ services:
       start_period: 30s
     ports:
       - "3003:3003"
-    mem_limit: 192m
+    # mem_limit: 192m
 
   products:
     image: ghcr.io/fintech-gateway-solution/products:dev-latest
@@ -164,7 +164,7 @@ services:
       start_period: 30s
     ports:
       - "3004:3004"
-    mem_limit: 192m
+    # mem_limit: 192m
 
   web:
     image: ghcr.io/fintech-gateway-solution/dashboard/web:dev-latest
@@ -175,4 +175,4 @@ services:
       DOMAIN_NAME: localhost
     ports:
       - "8080:80"
-    mem_limit: 64m
+    # mem_limit: 64m

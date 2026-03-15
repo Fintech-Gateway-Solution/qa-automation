@@ -94,24 +94,47 @@ jobs:
 
       - name: Start service stack
         run: |
+          # Start DB first and wait for it to be healthy
+          docker compose -f docker-compose.ci.yml up -d db
+          echo "⏳ Waiting for DB to be healthy..."
+          for i in $(seq 1 30); do
+            if docker compose -f docker-compose.ci.yml ps db --format json 2>/dev/null | jq -e 'select(.Health == "healthy")' > /dev/null 2>&1; then
+              echo "✅ DB healthy after ~$((i*2))s"
+              break
+            fi
+            [ "$i" = "30" ] && echo "⚠️ DB still not healthy after 60s" && docker compose -f docker-compose.ci.yml logs db --tail 10
+            sleep 2
+          done
+
+          # Start all remaining services
           docker compose -f docker-compose.ci.yml up -d
           echo "⏳ Waiting for all services to become healthy..."
 
       - name: Wait for services to be healthy
         run: |
-          MAX_WAIT=120
+          MAX_WAIT=180
           INTERVAL=5
           ELAPSED=0
           REQUIRED_HEALTHY=6  # db, auth, api, sendpayment, receivepayment, products
 
           while [ "$ELAPSED" -lt "$MAX_WAIT" ]; do
             HEALTHY=$(docker compose -f docker-compose.ci.yml ps --format json 2>/dev/null | jq -s '[.[] | select(.Health == "healthy")] | length' 2>/dev/null || echo "0")
-            echo "  [$ELAPSED/${MAX_WAIT}s] $HEALTHY/$REQUIRED_HEALTHY services healthy"
+            EXITED=$(docker compose -f docker-compose.ci.yml ps --format json 2>/dev/null | jq -s '[.[] | select(.State == "exited")] | length' 2>/dev/null || echo "0")
+            echo "  [$ELAPSED/${MAX_WAIT}s] $HEALTHY/$REQUIRED_HEALTHY healthy, $EXITED exited"
 
             if [ "$HEALTHY" -ge "$REQUIRED_HEALTHY" ]; then
               echo "✅ All services healthy!"
               docker compose -f docker-compose.ci.yml ps
               break
+            fi
+
+            # If any service exited, dump logs and retry
+            if [ "$EXITED" -gt "0" ]; then
+              echo "⚠️ Containers exited — dumping logs:"
+              docker compose -f docker-compose.ci.yml logs --tail 15
+              echo ""
+              echo "Restarting exited containers..."
+              docker compose -f docker-compose.ci.yml up -d
             fi
 
             sleep "$INTERVAL"
@@ -122,8 +145,8 @@ jobs:
             echo "❌ Services failed to become healthy within ${MAX_WAIT}s"
             docker compose -f docker-compose.ci.yml ps
             echo ""
-            echo "=== Container Logs ==="
-            docker compose -f docker-compose.ci.yml logs --tail 20
+            echo "=== All Container Logs ==="
+            docker compose -f docker-compose.ci.yml logs --tail 50
             exit 1
           fi
 
