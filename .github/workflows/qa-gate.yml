@@ -124,9 +124,9 @@ jobs:
             sleep 3
           done
 
-          # Stage 3: Start remaining services (auth schema exists, safe for other migrations)
+          # Stage 3: Start remaining services WITHOUT restarting auth (which is already healthy)
           echo "⏳ Starting remaining services..."
-          docker compose -f docker-compose.ci.yml up -d 2>&1 || true
+          docker compose -f docker-compose.ci.yml up -d --no-recreate 2>&1 || true
           docker compose -f docker-compose.ci.yml ps
 
       - name: Wait for services to be healthy
