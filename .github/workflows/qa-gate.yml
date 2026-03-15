@@ -126,18 +126,25 @@ jobs:
           # Stage 2: Auth (creates shared schema + tenants table)
           echo "=== Stage 2: Starting auth (runs migrations) ==="
           $COMPOSE up -d auth
-          wait_healthy auth 180 3
+          wait_healthy auth 240 3
+          if ! $COMPOSE ps auth --format json 2>/dev/null | jq -e 'select(.Health == "healthy")' > /dev/null 2>&1; then
+            echo "FATAL: Auth never became healthy — aborting"
+            $COMPOSE logs auth --tail 30
+            exit 1
+          fi
 
           # Stage 3: Dashboard API (clear migration table first)
+          # --no-deps prevents docker compose from touching auth/db
           echo "=== Stage 3: Starting dashboard API ==="
           clear_migrations
-          $COMPOSE up -d api
+          $COMPOSE up -d --no-deps api
           wait_healthy api 120 3
 
           # Stage 4: Products + payment services + web (clear migration table first)
+          # --no-deps prevents docker compose from restarting auth/api/db
           echo "=== Stage 4: Starting remaining services ==="
           clear_migrations
-          $COMPOSE up -d products sendpayment receivepayment web
+          $COMPOSE up -d --no-deps products sendpayment receivepayment web
           echo "Waiting 15s for services to initialize..."
           sleep 15
 
