@@ -8,9 +8,9 @@
 #
 # If tests fail, the calling workflow's deploy job is blocked.
 #
-# Migration strategy: Services share one Postgres DB but have independent drizzle
-# migration journals. We start services sequentially and clear the shared
-# __drizzle_migrations table between each to prevent cross-service conflicts.
+# Migration strategy: All services use per-migration-transaction runners that
+# track applied migrations by journal timestamp. Multiple services can safely
+# share one __drizzle_migrations table without clearing between starts.
 ##
 
 name: QA Gate
@@ -90,7 +90,6 @@ jobs:
       - name: Start service stack (sequential to avoid migration conflicts)
         run: |
           COMPOSE="docker compose -f docker-compose.ci.yml"
-          DB_URL="postgres://fintech:ci-test-password@localhost:5432/fintech"
 
           wait_healthy() {
             local SVC=$1 MAX=$2 INTERVAL=${3:-3}
@@ -101,9 +100,10 @@ jobs:
               fi
               STATE=$($COMPOSE ps "$SVC" --format json 2>/dev/null | jq -r '.State' 2>/dev/null || echo "unknown")
               if [ "$STATE" = "exited" ]; then
-                echo "  $SVC exited — restarting..."
+                echo "  $SVC exited — dumping logs..."
                 $COMPOSE logs "$SVC" --tail 10
-                $COMPOSE up -d "$SVC" 2>&1 || true
+                echo "  Restarting $SVC..."
+                $COMPOSE up -d --no-deps "$SVC" 2>&1 || true
               fi
               sleep "$INTERVAL"
             done
@@ -112,20 +112,18 @@ jobs:
             return 1
           }
 
-          clear_migrations() {
-            # Clear shared drizzle migration tracking so next service starts from 0
-            docker run --rm --network host postgres:16-alpine \
-              psql "$DB_URL" -c 'DELETE FROM drizzle."__drizzle_migrations"' 2>/dev/null || true
-          }
+          # All services use per-migration-transaction runners that track
+          # by journal timestamp, so the shared __drizzle_migrations table
+          # works correctly without clearing between services.
 
           # Stage 1: DB
           echo "=== Stage 1: Starting database ==="
           $COMPOSE up -d db
           wait_healthy db 60 2
 
-          # Stage 2: Auth (creates shared schema + tenants table)
-          echo "=== Stage 2: Starting auth (runs migrations) ==="
-          $COMPOSE up -d auth
+          # Stage 2: Auth (creates auth schema + seeds users)
+          echo "=== Stage 2: Starting auth ==="
+          $COMPOSE up -d --no-deps auth
           wait_healthy auth 240 3
           if ! $COMPOSE ps auth --format json 2>/dev/null | jq -e 'select(.Health == "healthy")' > /dev/null 2>&1; then
             echo "FATAL: Auth never became healthy — aborting"
@@ -133,17 +131,13 @@ jobs:
             exit 1
           fi
 
-          # Stage 3: Dashboard API (clear migration table first)
-          # --no-deps prevents docker compose from touching auth/db
+          # Stage 3: Dashboard API (creates tenants, payees, funding_accounts, etc.)
           echo "=== Stage 3: Starting dashboard API ==="
-          clear_migrations
           $COMPOSE up -d --no-deps api
           wait_healthy api 120 3
 
-          # Stage 4: Products + payment services + web (clear migration table first)
-          # --no-deps prevents docker compose from restarting auth/api/db
+          # Stage 4: Remaining services (each runs own migrations by timestamp)
           echo "=== Stage 4: Starting remaining services ==="
-          clear_migrations
           $COMPOSE up -d --no-deps products sendpayment receivepayment web
           echo "Waiting 15s for services to initialize..."
           sleep 15
