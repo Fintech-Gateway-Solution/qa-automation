@@ -200,6 +200,38 @@ for i, t in enumerate(timestamps):
     pass "[$repo_name] Journal timestamps are unique within repo"
   fi
 
+  # Check: no existing journal entry's 'when' timestamp was modified
+  # This is the ROOT CAUSE of the prod crash — changing timestamps causes re-application
+  if git rev-parse HEAD > /dev/null 2>&1; then
+    local journal_rel
+    # Get relative path from repo root for git show
+    journal_rel=$(git ls-files --full-name "$journal" 2>/dev/null || echo "")
+    if [[ -n "$journal_rel" ]]; then
+      local immutable_check
+      immutable_check=$(python3 -c "
+import json, sys, subprocess
+try:
+    old_raw = subprocess.run(['git', 'show', 'HEAD:$journal_rel'], capture_output=True, text=True)
+    if old_raw.returncode != 0: sys.exit(0)  # new file, no old version
+    old = json.loads(old_raw.stdout)
+    with open('$journal') as f: new = json.load(f)
+    old_map = {e['idx']: e['when'] for e in old['entries']}
+    for e in new['entries']:
+        if e['idx'] in old_map and old_map[e['idx']] != e['when']:
+            print(f\"idx={e['idx']} ({e['tag']}): when changed {old_map[e['idx']]} -> {e['when']}\")
+except Exception as ex:
+    pass  # skip check if anything fails
+" 2>/dev/null || echo "")
+      if [[ -n "$immutable_check" ]]; then
+        error "[$repo_name] Journal timestamps were MODIFIED (this causes migration re-application!):"
+        echo "$immutable_check"
+        echo "  Fix: revert the 'when' values. Only ADD new entries, never change existing ones."
+      else
+        pass "[$repo_name] No existing journal timestamps were modified"
+      fi
+    fi
+  fi
+
   # Check that all referenced SQL files exist
   local missing_sql
   missing_sql=$(python3 -c "
