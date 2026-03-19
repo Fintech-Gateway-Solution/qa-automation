@@ -84,6 +84,59 @@ jobs:
           echo "Updated docker-compose.ci.yml images:"
           grep "image:" docker-compose.ci.yml
 
+      - name: Lint migrations (Dockerfile safety + cross-service timestamp collisions)
+        run: |
+          echo "Checking Dockerfile safety and journal integrity..."
+          # Extract migration journals from all service images for cross-repo validation
+          SERVICES="auth dashboard/api products sendpayment receivepayment"
+          mkdir -p /tmp/migration-lint
+
+          for SVC in $SERVICES; do
+            IMG="ghcr.io/fintech-gateway-solution/${SVC}"
+            TAG=$(grep "${SVC}" docker-compose.ci.yml | grep "image:" | sed 's/.*://' | tr -d ' "' || echo "dev-latest")
+            DIR_NAME=$(echo "$SVC" | tr '/' '-')
+            mkdir -p "/tmp/migration-lint/$DIR_NAME/migrations/meta"
+
+            # Extract journal from Docker image
+            CONTAINER=$(docker create "${IMG}:${TAG}" 2>/dev/null || docker create "${IMG}:dev-latest" 2>/dev/null || true)
+            if [ -n "$CONTAINER" ]; then
+              docker cp "$CONTAINER:/app/migrations/meta/_journal.json" "/tmp/migration-lint/$DIR_NAME/migrations/meta/_journal.json" 2>/dev/null \
+                || docker cp "$CONTAINER:/app/src/db/migrations/meta/_journal.json" "/tmp/migration-lint/$DIR_NAME/migrations/meta/_journal.json" 2>/dev/null \
+                || echo "WARN: Could not extract journal from $SVC"
+              docker rm "$CONTAINER" > /dev/null 2>&1 || true
+            fi
+          done
+
+          # Run cross-service timestamp collision check
+          python3 -c "
+          import json, os, sys, glob
+
+          base = '/tmp/migration-lint'
+          all_entries = []
+
+          for svc_dir in glob.glob(f'{base}/*/migrations/meta/_journal.json'):
+              svc_name = svc_dir.split('/')[-4]
+              with open(svc_dir) as f:
+                  j = json.load(f)
+              for e in j['entries']:
+                  all_entries.append((e['when'], svc_name, e['tag']))
+
+          by_ts = {}
+          for when, svc, tag in all_entries:
+              by_ts.setdefault(when, []).append((svc, tag))
+
+          collisions = {k: v for k, v in by_ts.items() if len(set(s for s,_ in v)) > 1}
+
+          if collisions:
+              print('MIGRATION TIMESTAMP COLLISIONS DETECTED:')
+              for ts, entries in sorted(collisions.items()):
+                  items = ', '.join(f'{s}/{t}' for s, t in entries)
+                  print(f'  when={ts}: {items}')
+              sys.exit(1)
+          else:
+              print(f'OK: {len(all_entries)} migrations across {len(set(d.split(\"/\")[-4] for d in glob.glob(f\"{base}/*/migrations/meta/_journal.json\")))} services, no collisions')
+          "
+
       - name: Pull Docker images
         run: docker compose -f docker-compose.ci.yml pull
 
