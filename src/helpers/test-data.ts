@@ -9,29 +9,27 @@ export function uniqueId(): string {
 
 export function qaPayee() {
   const id = uniqueId();
+  const digits = String(Date.now()).slice(-8);
   return {
     name: `QA-Payee-${id}`,
     email: `qa-payee-${id}@test.local`,
     bankName: 'QA Test Bank',
     accountType: 'checking',
     routingNumber: '021000021',
-    accountNumber: `12345${id.slice(0, 5)}`,
+    accountNumber: `100000${digits}`,
     accountHolderName: `QA Payee ${id}`,
-    street: '123 QA Street',
-    city: 'Test City',
-    state: 'CA',
-    zipCode: '90210',
   };
 }
 
 export function qaFundingAccount() {
   const id = uniqueId();
+  const digits = String(Date.now() + 1).slice(-8);
   return {
     nickname: `QA-Funding-${id}`,
     bankName: 'QA Funding Bank',
     accountType: 'checking',
     routingNumber: '021000021',
-    accountNumber: `98765${id.slice(0, 5)}`,
+    accountNumber: `200000${digits}`,
     accountHolderName: `QA Funding ${id}`,
   };
 }
@@ -64,15 +62,26 @@ export function qaDepartment() {
   };
 }
 
+export function qaUser(locationId?: string) {
+  const id = uniqueId();
+  return {
+    name: `QA-User-${id}`,
+    email: `qa-user-${id}@test.local`,
+    password: 'QaTest123!',
+    role: 'employee',
+    ...(locationId ? { locationId } : {}),
+  };
+}
+
 export function qaInvoice(customerId: string) {
   return {
     customerId,
     dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
-    lineItems: [
+    lines: [
       {
         description: 'QA Test Service',
         quantity: 1,
-        unitPrice: '100.00',
+        unitPrice: 100,
       },
     ],
   };
