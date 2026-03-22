@@ -51,6 +51,9 @@ services:
       RESEND_API_KEY: ""
       EMAIL_FROM: noreply@test.local
       NODE_OPTIONS: --max-old-space-size=192
+      DB_POOL_MAX: "2"
+      DB_IDLE_TIMEOUT: "20"
+      DB_APPLICATION_NAME: auth
     healthcheck:
       test: wget -q --spider http://127.0.0.1:3001/api/v1/health || exit 1
       interval: 5s
@@ -78,6 +81,9 @@ services:
       CORS_ORIGINS: http://localhost:8080
       RUN_MIGRATIONS: "true"
       NODE_OPTIONS: --max-old-space-size=192
+      DB_POOL_MAX: "2"
+      DB_IDLE_TIMEOUT: "20"
+      DB_APPLICATION_NAME: dashboard-api
     healthcheck:
       test: wget -q --spider http://127.0.0.1:3000/api/v1/health || exit 1
       interval: 5s
@@ -102,6 +108,9 @@ services:
       CORS_ORIGINS: http://localhost:8080
       RUN_MIGRATIONS: "true"
       NODE_OPTIONS: --max-old-space-size=192
+      DB_POOL_MAX: "2"
+      DB_IDLE_TIMEOUT: "20"
+      DB_APPLICATION_NAME: sendpayment
     healthcheck:
       test: wget -q --spider http://127.0.0.1:3002/api/v1/health || exit 1
       interval: 5s
@@ -127,6 +136,9 @@ services:
       ENABLE_SWAGGER: "false"
       RUN_MIGRATIONS: "true"
       NODE_OPTIONS: --max-old-space-size=192
+      DB_POOL_MAX: "2"
+      DB_IDLE_TIMEOUT: "20"
+      DB_APPLICATION_NAME: receivepayment
     healthcheck:
       test: wget -q --spider http://127.0.0.1:3003/api/v1/health || exit 1
       interval: 5s
@@ -150,6 +162,9 @@ services:
       CORS_ORIGINS: http://localhost:8080
       RUN_MIGRATIONS: "true"
       NODE_OPTIONS: --max-old-space-size=192
+      DB_POOL_MAX: "2"
+      DB_IDLE_TIMEOUT: "20"
+      DB_APPLICATION_NAME: products
     # Override CMD: skip strict migration validation in CI (shared DB journal mismatch)
     command: ["sh", "-c", "node pre-migrate.mjs && npx drizzle-kit migrate 2>&1 || echo 'WARN: drizzle-kit migration issue'; exec node dist/index.js"]
     healthcheck:
