@@ -184,14 +184,19 @@ jobs:
             exit 1
           fi
 
-          # Stage 3: Dashboard API (creates tenants, payees, funding_accounts, etc.)
-          echo "=== Stage 3: Starting dashboard API ==="
+          # Stage 3: Sendpayment first — creates sp_payees table referenced by dashboard API migration 0036
+          echo "=== Stage 3: Starting sendpayment ==="
+          $COMPOSE up -d --no-deps sendpayment
+          wait_healthy sendpayment 90 3
+
+          # Stage 4: Dashboard API (creates tenants, payees, funding_accounts, etc.)
+          echo "=== Stage 4: Starting dashboard API ==="
           $COMPOSE up -d --no-deps api
           wait_healthy api 120 3
 
-          # Stage 4: Remaining services (each runs own migrations by timestamp)
-          echo "=== Stage 4: Starting remaining services ==="
-          $COMPOSE up -d --no-deps products sendpayment receivepayment web
+          # Stage 5: Remaining services (each runs own migrations by timestamp)
+          echo "=== Stage 5: Starting remaining services ==="
+          $COMPOSE up -d --no-deps products receivepayment web
           echo "Waiting 15s for services to initialize..."
           sleep 15
 
