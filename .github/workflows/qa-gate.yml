@@ -76,6 +76,9 @@ jobs:
             pos-backend)
               echo "POS backend not yet in CI compose — skipping override"
               ;;
+            sync)
+              sed -i "s|sync:dev-latest|sync:${TAG}|" docker-compose.ci.yml
+              ;;
             *)
               echo "Unknown service: $SERVICE"
               ;;
@@ -196,7 +199,7 @@ jobs:
 
           # Stage 5: Remaining services (each runs own migrations by timestamp)
           echo "=== Stage 5: Starting remaining services ==="
-          $COMPOSE up -d --no-deps products receivepayment web
+          $COMPOSE up -d --no-deps products receivepayment sync web
           echo "Waiting 15s for services to initialize..."
           sleep 15
 
@@ -208,7 +211,7 @@ jobs:
           MAX_WAIT=120
           INTERVAL=5
           ELAPSED=0
-          REQUIRED_HEALTHY=6  # db, auth, api, sendpayment, receivepayment, products
+          REQUIRED_HEALTHY=7  # db, auth, api, sendpayment, receivepayment, products, sync
 
           while [ "$ELAPSED" -lt "$MAX_WAIT" ]; do
             HEALTHY=$(docker compose -f docker-compose.ci.yml ps --format json 2>/dev/null | jq -s '[.[] | select(.Health == "healthy")] | length' 2>/dev/null || echo "0")

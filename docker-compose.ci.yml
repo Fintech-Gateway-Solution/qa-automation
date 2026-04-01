@@ -176,6 +176,32 @@ services:
     ports:
       - "3004:3004"
 
+  sync:
+    image: ghcr.io/fintech-gateway-solution/sync:dev-latest
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: "3006"
+      HOST: 0.0.0.0
+      NODE_ENV: production
+      DATABASE_URL: postgres://fintech:ci-test-password@db:5432/fintech
+      TENANT_MODE: header
+      DEFAULT_TENANT_ID: "00000000-0000-0000-0000-000000000001"
+      JWT_SECRET: ci-jwt-secret-for-testing-only
+      CORS_ORIGINS: http://localhost:8080
+      DB_POOL_MAX: "2"
+      DB_IDLE_TIMEOUT: "20"
+      DB_APPLICATION_NAME: sync
+    healthcheck:
+      test: wget -q --spider http://127.0.0.1:3006/api/v1/health || exit 1
+      interval: 5s
+      timeout: 3s
+      retries: 15
+      start_period: 30s
+    ports:
+      - "3006:3006"
+
   web:
     image: ghcr.io/fintech-gateway-solution/dashboard/web:dev-latest
     depends_on:
