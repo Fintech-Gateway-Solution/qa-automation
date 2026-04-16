@@ -28,11 +28,8 @@ on:
         type: string
     secrets:
       GHCR_PAT:
-        required: false
-
-permissions:
-  contents: read
-  packages: read
+        required: true
+        description: 'Org-wide PAT for pulling all service images from GHCR'
 
 jobs:
   qa-gate:
@@ -51,8 +48,8 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: fintech-gateway
+          password: ${{ secrets.GHCR_PAT }}
 
       - name: Override image for deployed service
         run: |
