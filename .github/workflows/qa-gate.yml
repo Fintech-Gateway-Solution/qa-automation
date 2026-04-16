@@ -30,6 +30,10 @@ on:
       GHCR_PAT:
         required: false
 
+permissions:
+  contents: read
+  packages: read
+
 jobs:
   qa-gate:
     name: "QA Gate (${{ inputs.service }})"
