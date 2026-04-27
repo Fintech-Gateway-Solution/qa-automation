@@ -165,8 +165,11 @@ services:
       DB_POOL_MAX: "2"
       DB_IDLE_TIMEOUT: "20"
       DB_APPLICATION_NAME: products
-    # Override CMD: skip strict migration validation in CI (shared DB journal mismatch)
-    command: ["sh", "-c", "node pre-migrate.mjs && npx drizzle-kit migrate 2>&1 || echo 'WARN: drizzle-kit migration issue'; exec node dist/index.js"]
+    # Override CMD: use the image's migrate.mjs (knows where our SQL lives and
+    # ignores already-applied / shared-DB collisions) instead of `drizzle-kit migrate`,
+    # which expects drizzle.config.json — we ship drizzle.config.ts and the bare
+    # CLI invocation no-ops, leaving new migrations like 0021_create_import_jobs unapplied.
+    command: ["sh", "-c", "node pre-migrate.mjs && node migrate.mjs 2>&1 || echo 'WARN: products migration issue'; exec node dist/index.js"]
     healthcheck:
       test: wget -q --spider http://127.0.0.1:3004/api/v1/health || exit 1
       interval: 5s
