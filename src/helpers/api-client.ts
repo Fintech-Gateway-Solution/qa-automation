@@ -131,4 +131,46 @@ export class ApiClient {
   async healthProducts() {
     return this.request.get(`${API_PATHS.PRODUCTS}/health`);
   }
+
+  // ─── Purchase Orders ────────────────────────────────────
+
+  async getPurchaseOrders(params: Record<string, string> = {}) {
+    return this.request.get(`${API_PATHS.DASHBOARD}/purchase-orders`, { params });
+  }
+
+  async getPurchaseOrder(id: string) {
+    return this.request.get(`${API_PATHS.DASHBOARD}/purchase-orders/${id}`);
+  }
+
+  async createPurchaseOrder(data: Record<string, unknown>) {
+    return this.request.post(`${API_PATHS.DASHBOARD}/purchase-orders`, { data });
+  }
+
+  async resendPurchaseOrderEmail(id: string) {
+    return this.request.post(`${API_PATHS.DASHBOARD}/purchase-orders/${id}/resend-email`);
+  }
+
+  async getWarehouseOrders(params: Record<string, string> = {}) {
+    return this.request.get(`${API_PATHS.DASHBOARD}/purchase-orders/warehouse-orders`, { params });
+  }
+
+  async fulfillWarehouseOrder(id: string) {
+    return this.request.post(`${API_PATHS.DASHBOARD}/purchase-orders/${id}/fulfill`);
+  }
+
+  async createDashboardPayee(data: Record<string, unknown>) {
+    return this.request.post(`${API_PATHS.DASHBOARD}/payees`, { data });
+  }
+
+  async getDashboardPayees(params: Record<string, string> = {}) {
+    return this.request.get(`${API_PATHS.DASHBOARD}/payees`, { params });
+  }
+
+  async getPayeeProducts(payeeId: string) {
+    return this.request.get(`${API_PATHS.DASHBOARD}/payees/${payeeId}/products`);
+  }
+
+  async getWarehouses() {
+    return this.request.get(`${API_PATHS.DASHBOARD}/warehouses`);
+  }
 }

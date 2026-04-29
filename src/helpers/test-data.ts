@@ -86,3 +86,49 @@ export function qaInvoice(customerId: string) {
     ],
   };
 }
+
+export function qaThirdPartyVendor() {
+  const id = uniqueId();
+  return {
+    name: `QA-Vendor-${id}`,
+    email: `qa-vendor-${id}@test.local`,
+    contactName: `QA Vendor ${id}`,
+    phone: '5551234567',
+    vendorType: 'third_party',
+  };
+}
+
+export function qaWarehouseVendor(linkedWarehouseId: string, linkedWarehouseLocationId: string | null = null) {
+  const id = uniqueId();
+  return {
+    name: `QA-WarehouseVendor-${id}`,
+    email: `qa-whvendor-${id}@test.local`,
+    contactName: `QA Warehouse Vendor ${id}`,
+    phone: '5551234567',
+    vendorType: 'warehouse',
+    linkedWarehouseId,
+    linkedWarehouseLocationId,
+  };
+}
+
+export function qaPurchaseOrder(args: {
+  payeeId: string;
+  locationId: string;
+  productId: string;
+  quantity?: number;
+  costPerUnit?: number;
+}) {
+  return {
+    payeeId: args.payeeId,
+    locationId: args.locationId,
+    createdByName: 'QA Automation',
+    items: [
+      {
+        productId: args.productId,
+        unitOfMeasure: 'each',
+        quantity: args.quantity ?? 1,
+        costPerUnit: args.costPerUnit ?? 5,
+      },
+    ],
+  };
+}
