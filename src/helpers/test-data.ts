@@ -21,7 +21,7 @@ export function qaPayee() {
   };
 }
 
-export function qaFundingAccount() {
+export function qaFundingAccount(locationId: string) {
   const id = uniqueId();
   const digits = String(Date.now() + 1).slice(-8);
   return {
@@ -31,6 +31,7 @@ export function qaFundingAccount() {
     routingNumber: '021000021',
     accountNumber: `200000${digits}`,
     accountHolderName: `QA Funding ${id}`,
+    locationId,
   };
 }
 
