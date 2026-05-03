@@ -84,9 +84,12 @@ test.describe('PO #3: resend-email endpoint', () => {
     expect(poRes.ok(), `createPurchaseOrder failed: ${poRes.status()} ${await poRes.text()}`).toBeTruthy();
     const { data: po } = await poRes.json();
 
-    const resendRes = await apiClient.resendPurchaseOrderEmail(po.id);
-    expect(resendRes.status()).toBe(400);
-    const body = await resendRes.json();
+    // Per migration 0049, POs default to draft and resend is only valid for
+    // sent POs. NO_VENDOR_EMAIL is now surfaced by the draft -> sent transition,
+    // which is the path the UI's "Send" button uses. Verify it there.
+    const sendRes = await apiClient.sendPurchaseOrder(po.id);
+    expect(sendRes.status()).toBe(400);
+    const body = await sendRes.json();
     expect(body.error?.code).toBe('NO_VENDOR_EMAIL');
   });
 
@@ -103,6 +106,10 @@ test.describe('PO #3: resend-email endpoint', () => {
     );
     expect(poRes.ok(), `createPurchaseOrder failed: ${poRes.status()} ${await poRes.text()}`).toBeTruthy();
     const { data: po } = await poRes.json();
+
+    // Resend is gated to status='sent' — transition the draft first.
+    const sendRes = await apiClient.sendPurchaseOrder(po.id);
+    expect(sendRes.ok(), `send failed: ${sendRes.status()} ${await sendRes.text()}`).toBeTruthy();
 
     const resendRes = await apiClient.resendPurchaseOrderEmail(po.id);
     expect(resendRes.ok(), `resend failed: ${resendRes.status()} ${await resendRes.text()}`).toBeTruthy();

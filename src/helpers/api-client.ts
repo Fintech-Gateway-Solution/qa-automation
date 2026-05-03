@@ -150,6 +150,10 @@ export class ApiClient {
     return this.request.post(`${API_PATHS.DASHBOARD}/purchase-orders/${id}/resend-email`);
   }
 
+  async sendPurchaseOrder(id: string) {
+    return this.request.post(`${API_PATHS.DASHBOARD}/purchase-orders/${id}/send`);
+  }
+
   async getWarehouseOrders(params: Record<string, string> = {}) {
     return this.request.get(`${API_PATHS.DASHBOARD}/purchase-orders/warehouse-orders`, { params });
   }
