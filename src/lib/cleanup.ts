@@ -139,7 +139,10 @@ export async function cleanupQaData(opts: CleanupOptions): Promise<CleanupResult
     const rows: any[] = body.data ?? [];
     if (rows.length === 0) break;
     for (const po of rows) {
-      if (po.createdByName === QA_PO_CREATED_BY) {
+      // Skip terminal states (cancelled / received) — DELETE only accepts draft
+      // and /cancel only accepts draft|sent, so further calls just 400. The
+      // rows are tombstone records that don't affect any flows.
+      if (po.createdByName === QA_PO_CREATED_BY && po.status !== 'cancelled' && po.status !== 'received') {
         targetPos.push({ id: po.id, orderNumber: po.orderNumber, status: po.status, createdByName: po.createdByName });
       }
     }
@@ -191,9 +194,22 @@ export async function cleanupQaData(opts: CleanupOptions): Promise<CleanupResult
   for (const u of targetUsers) {
     log(`  ${opts.dryRun ? '(dry)' : 'DELETE'} user ${u.id} | <${u.email}>`);
     if (opts.dryRun) continue;
+    // Auth has an aggressive global rate-limit (~5/s) — pace ourselves so a
+    // big batch doesn't get 429'd. This adds at most a few seconds total.
+    await new Promise((r) => setTimeout(r, 250));
     const res = await opts.request.delete(`/auth-api/v1/users/${u.id}`);
     if (res.ok() || res.status() === 404 || res.status() === 204) {
       result.users.deleted++;
+    } else if (res.status() === 429) {
+      // Back off and retry once.
+      await new Promise((r) => setTimeout(r, 2_000));
+      const retry = await opts.request.delete(`/auth-api/v1/users/${u.id}`);
+      if (retry.ok() || retry.status() === 404 || retry.status() === 204) {
+        result.users.deleted++;
+      } else {
+        result.users.failed++;
+        result.notes.push(`user delete ${u.id} -> ${retry.status()} (after backoff)`);
+      }
     } else {
       result.users.failed++;
       result.notes.push(`user delete ${u.id} -> ${res.status()}: ${(await res.text()).slice(0, 200)}`);
@@ -202,7 +218,10 @@ export async function cleanupQaData(opts: CleanupOptions): Promise<CleanupResult
 
   // ─── ReceivePayment customers ───────────────────────────────────────────
   // Match: name starts with "QA-Customer-" AND email matches /^qa-customer-…@test\.local$/i.
-  // 409 from server (CUSTOMER_HAS_INVOICES) is treated as a soft-fail with note.
+  // The customer DELETE endpoint refuses (409) when invoices reference the
+  // customer, so we delete each customer's invoices first. Both are QA
+  // fixtures (qa-customer-…@test.local + the invoice rows the
+  // location-scoping tests created against them), so this is safe.
   const targetCustomers: Array<{ id: string; name: string; email: string }> = [];
   {
     const res = await opts.request.get('/rp-api/v1/customers');
@@ -223,6 +242,23 @@ export async function cleanupQaData(opts: CleanupOptions): Promise<CleanupResult
   result.customers.matched = targetCustomers.length;
   log(`[cleanup] customers matched: ${targetCustomers.length}`);
   for (const c of targetCustomers) {
+    // First, delete this customer's invoices (the FK that would otherwise 409).
+    const invRes = await opts.request.get('/rp-api/v1/invoices', {
+      params: { customerId: c.id, limit: '500' },
+    });
+    if (invRes.ok()) {
+      const body = await invRes.json();
+      const invoices: any[] = body.data ?? [];
+      for (const inv of invoices) {
+        log(`  ${opts.dryRun ? '(dry)' : 'DELETE'} invoice ${inv.id} (customer ${c.id})`);
+        if (opts.dryRun) continue;
+        const dr = await opts.request.delete(`/rp-api/v1/invoices/${inv.id}`);
+        if (!dr.ok() && dr.status() !== 404 && dr.status() !== 204) {
+          result.notes.push(`invoice delete ${inv.id} -> ${dr.status()}: ${(await dr.text()).slice(0, 200)}`);
+        }
+      }
+    }
+
     log(`  ${opts.dryRun ? '(dry)' : 'DELETE'} customer ${c.id} | ${c.name} <${c.email}>`);
     if (opts.dryRun) continue;
     const res = await opts.request.delete(`/rp-api/v1/customers/${c.id}`);
@@ -236,7 +272,9 @@ export async function cleanupQaData(opts: CleanupOptions): Promise<CleanupResult
 
   // ─── Things we don't touch and why ──────────────────────────────────────
   result.notes.push(
-    'skipped: products (DELETE is soft-deactivate; QA-LowThreshold-* products are intentionally preserved as fixtures).',
+    'skipped: products (DELETE is soft-deactivate; QA-LowThreshold-* products are intentional fixtures); ' +
+      'sent/paid/etc. invoices (DELETE /invoices/:id only accepts draft) — fresh test runs always create drafts so they DO get cleaned; ' +
+      'historic non-draft invoices block their parent QA customer from being hard-deleted.',
   );
 
   log(
