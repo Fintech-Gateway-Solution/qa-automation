@@ -2,6 +2,10 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './src/tests',
+  // Auto-purge QA fixtures (payees, funding accounts, POs whose names match
+  // the strict QA-prefix + @test.local rule) after every run. Bypass with
+  // CLEANUP=skip if you want to inspect leftover state.
+  globalTeardown: './globalTeardown.ts',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

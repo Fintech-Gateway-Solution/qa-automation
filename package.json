@@ -1,18 +1,21 @@
 {
   "name": "qa-automation",
   "version": "1.0.0",
-  "description": "QA automation suite for Fintech Gateway — Playwright e2e + API tests",
+  "description": "QA automation suite for Fintech Gateway \u2014 Playwright e2e + API tests",
   "private": true,
   "scripts": {
     "test": "npx playwright test",
     "test:smoke": "npx playwright test --project=smoke",
     "test:regression": "npx playwright test --project=chromium",
     "test:ui": "npx playwright test --ui",
-    "report": "npx playwright show-report"
+    "report": "npx playwright show-report",
+    "cleanup": "tsx scripts/cleanup-qa-data.ts",
+    "cleanup:execute": "tsx scripts/cleanup-qa-data.ts --execute"
   },
   "devDependencies": {
     "@playwright/test": "^1.50.0",
     "@types/node": "^25.5.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "tsx": "^4.20.0"
   }
 }
