@@ -49,12 +49,21 @@ test.describe('PO #1: /payees/:id/products returns reorderThreshold + inStockQty
     expect(vendorRes.ok(), `createDashboardPayee failed: ${vendorRes.status()} ${await vendorRes.text()}`).toBeTruthy();
     const { data: vendor } = await vendorRes.json();
 
+    // Link the new vendor to a sample product so /payees/:id/products has
+    // something to return — without this, the fresh vendor has zero linked
+    // products and the assertions below would never run.
+    const product = await getFirstProduct(apiClient, testInfo);
+    const linkRes = await apiClient.updateProduct(product.id, {
+      payees: [{ payeeId: vendor.id, unitName: 'each', vendorPrice: 5 }],
+    });
+    expect(linkRes.ok(), `link vendor to product failed: ${linkRes.status()} ${await linkRes.text()}`).toBeTruthy();
+
     const res = await apiClient.getPayeeProducts(vendor.id);
     expect(res.ok(), `getPayeeProducts failed: ${res.status()} ${await res.text()}`).toBeTruthy();
     const body = await res.json();
     const products: any[] = body.data ?? [];
 
-    if (products.length === 0) testInfo.skip(true, 'Vendor has no products linked — cannot validate field shape');
+    expect(products.length, 'vendor should have at least one linked product after explicit link').toBeGreaterThan(0);
     for (const p of products) {
       // The low-threshold client filter requires both fields. Either may be
       // null (no threshold set) but the keys must exist on the row.
