@@ -55,8 +55,8 @@ test.describe('Location Scoping: SendPayment', () => {
     expect(payeeRes.ok(), `createPayee failed: ${payeeRes.status()} ${JSON.stringify(payeeBody)}`).toBeTruthy();
     const { data: payee } = payeeBody;
 
-    // Create a funding account
-    const faRes = await apiClient.createFundingAccount(qaFundingAccount());
+    // Create a funding account (locationId is required by the sendpayment API)
+    const faRes = await apiClient.createFundingAccount(qaFundingAccount(location.id));
     expect(faRes.ok(), `createFundingAccount failed: ${faRes.status()} ${await faRes.text()}`).toBeTruthy();
     const { data: fundingAccount } = await faRes.json();
 
@@ -97,7 +97,7 @@ test.describe('Location Scoping: SendPayment', () => {
     expect(payeeRes.ok(), `createPayee failed: ${JSON.stringify(payeeBody)}`).toBeTruthy();
     const { data: payee } = payeeBody;
 
-    const faRes = await apiClient.createFundingAccount(qaFundingAccount());
+    const faRes = await apiClient.createFundingAccount(qaFundingAccount(location.id));
     const faBody = await faRes.json();
     expect(faRes.ok(), `createFundingAccount failed: ${JSON.stringify(faBody)}`).toBeTruthy();
     const { data: fundingAccount } = faBody;
