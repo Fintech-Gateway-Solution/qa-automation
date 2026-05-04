@@ -124,6 +124,10 @@ export class ApiClient {
     return this.request.get(`${API_PATHS.PRODUCTS}/products`);
   }
 
+  async updateProduct(id: string, data: Record<string, unknown>) {
+    return this.request.put(`${API_PATHS.PRODUCTS}/products/${id}`, { data });
+  }
+
   async getDepartments() {
     return this.request.get(`${API_PATHS.PRODUCTS}/departments`);
   }
