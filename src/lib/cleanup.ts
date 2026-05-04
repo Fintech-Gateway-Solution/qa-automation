@@ -82,8 +82,15 @@ export async function cleanupQaData(opts: CleanupOptions): Promise<CleanupResult
   for (const p of targetPayees) {
     log(`  ${opts.dryRun ? '(dry)' : 'DELETE'} payee ${p.id} | ${p.name} <${p.email}>`);
     if (opts.dryRun) continue;
-    const res = await opts.request.delete(`/api/v1/payees/${p.id}`);
-    if (res.ok() || res.status() === 404) {
+    // ?hard=true physically removes the payees row + sp_payees mirror +
+    // product_payees joins (instead of soft-deleting). Refused (409) if the
+    // vendor has POs/payments — older fixtures may have those, so we fall
+    // back to soft-delete in that case rather than fail.
+    let res = await opts.request.delete(`/api/v1/payees/${p.id}?hard=true`);
+    if (res.status() === 409) {
+      res = await opts.request.delete(`/api/v1/payees/${p.id}`);
+    }
+    if (res.ok() || res.status() === 404 || res.status() === 204) {
       result.payees.deleted++;
     } else {
       result.payees.failed++;
@@ -252,7 +259,8 @@ export async function cleanupQaData(opts: CleanupOptions): Promise<CleanupResult
       for (const inv of invoices) {
         log(`  ${opts.dryRun ? '(dry)' : 'DELETE'} invoice ${inv.id} (customer ${c.id})`);
         if (opts.dryRun) continue;
-        const dr = await opts.request.delete(`/rp-api/v1/invoices/${inv.id}`);
+        // ?force=true bypasses the "only draft can be deleted" state guard.
+        const dr = await opts.request.delete(`/rp-api/v1/invoices/${inv.id}?force=true`);
         if (!dr.ok() && dr.status() !== 404 && dr.status() !== 204) {
           result.notes.push(`invoice delete ${inv.id} -> ${dr.status()}: ${(await dr.text()).slice(0, 200)}`);
         }
@@ -272,9 +280,7 @@ export async function cleanupQaData(opts: CleanupOptions): Promise<CleanupResult
 
   // ─── Things we don't touch and why ──────────────────────────────────────
   result.notes.push(
-    'skipped: products (DELETE is soft-deactivate; QA-LowThreshold-* products are intentional fixtures); ' +
-      'sent/paid/etc. invoices (DELETE /invoices/:id only accepts draft) — fresh test runs always create drafts so they DO get cleaned; ' +
-      'historic non-draft invoices block their parent QA customer from being hard-deleted.',
+    'skipped: products (DELETE is soft-deactivate; QA-LowThreshold-* products are intentional fixtures).',
   );
 
   log(
