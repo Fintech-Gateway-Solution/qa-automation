@@ -133,3 +133,34 @@ export function qaPurchaseOrder(args: {
     ],
   };
 }
+
+export function qaAchSaleTransaction() {
+  const id = uniqueId();
+  return {
+    amount: '25.00',
+    paymentMethod: 'ach',
+    accountType: 'checking',
+    accountCategory: 'personal',
+    routingNumber: '021000021',
+    accountNumber: `300000${String(Date.now()).slice(-8)}`,
+    firstName: `QA`,
+    lastName: `Sale-${id}`,
+    phone: '5551234567',
+    email: `qa-sale-${id}@test.local`,
+    notes: `QA sale transaction ${id}`,
+  };
+}
+
+export function qaCardSaleTransaction() {
+  const id = uniqueId();
+  return {
+    amount: '15.50',
+    paymentMethod: 'card',
+    cardNumber: '4111111111111111',
+    expirationDate: '12/29',
+    cvv: '123',
+    cardZipCode: '10001',
+    cardHolderName: `QA Card ${id}`,
+    notes: `QA card sale ${id}`,
+  };
+}
