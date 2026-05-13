@@ -30,6 +30,18 @@ export class ApiClient {
     return this.request.get(`${API_PATHS.AUTH}/auth/me`);
   }
 
+  async requestPasswordReset(email: string) {
+    return this.request.post(`${API_PATHS.AUTH}/auth/password-reset/request`, {
+      data: { email },
+    });
+  }
+
+  async resetPassword(token: string, password: string) {
+    return this.request.post(`${API_PATHS.AUTH}/auth/password-reset/reset`, {
+      data: { token, password },
+    });
+  }
+
   async healthAuth() {
     return this.request.get(`${API_PATHS.AUTH}/health`);
   }
