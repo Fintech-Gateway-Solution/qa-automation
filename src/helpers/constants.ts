@@ -37,7 +37,17 @@ export const APP_ROUTES = [
   { name: 'Users', hash: '#/users' },
   { name: 'Settings', hash: '#/settings' },
   { name: 'Receive Payments', hash: '#/receive-payments' },
+  { name: 'Send Payments', hash: '#/send-payments' },
+  { name: 'POS Management', hash: '#/pos-management' },
   { name: 'Reports', hash: '#/reports' },
+];
+
+/** Auth (public) routes */
+export const AUTH_ROUTES = [
+  { name: 'Login', hash: '#/login' },
+  { name: 'Signup', hash: '#/signup' },
+  { name: 'Forgot Password', hash: '#/forgot-password' },
+  { name: 'Admin Login', hash: '#/admin/login' },
 ];
 
 /** Default test credentials (seeded by auth migration) */
