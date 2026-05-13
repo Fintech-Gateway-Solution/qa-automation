@@ -33,9 +33,15 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
     {
+      name: 'regression',
+      testMatch: /regression\/.*/,
+      timeout: 60_000,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
-      testIgnore: /smoke\/.*/,
+      testIgnore: [/smoke\/.*/, /regression\/.*/],
     },
   ],
 });

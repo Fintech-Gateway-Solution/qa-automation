@@ -6,7 +6,10 @@
   "scripts": {
     "test": "npx playwright test",
     "test:smoke": "npx playwright test --project=smoke",
-    "test:regression": "npx playwright test --project=chromium",
+    "test:regression": "npx playwright test --project=regression",
+    "test:regression:stage": "BASE_URL=https://finstage.qpaymentz.com npx playwright test --project=regression",
+    "test:regression:dev": "BASE_URL=https://findev.qpaymentz.com npx playwright test --project=regression",
+    "test:other": "npx playwright test --project=chromium",
     "test:ui": "npx playwright test --ui",
     "report": "npx playwright show-report",
     "cleanup": "npx tsx scripts/cleanup-qa-data.ts",

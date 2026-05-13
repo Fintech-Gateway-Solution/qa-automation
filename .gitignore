@@ -4,3 +4,6 @@ playwright-report/
 test-results/
 blob-report/
 .env
+.env.stage
+.env.dev
+.env.local
