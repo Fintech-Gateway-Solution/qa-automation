@@ -209,4 +209,36 @@ export class ApiClient {
   async receivePurchaseOrder(id: string) {
     return this.request.post(`${API_PATHS.DASHBOARD}/purchase-orders/${id}/receive`);
   }
+
+  async cancelPurchaseOrder(id: string, reason?: string) {
+    return this.request.post(`${API_PATHS.DASHBOARD}/purchase-orders/${id}/cancel`, {
+      data: { reason },
+    });
+  }
+
+  async deletePurchaseOrder(id: string) {
+    return this.request.delete(`${API_PATHS.DASHBOARD}/purchase-orders/${id}`);
+  }
+
+  async getPurchaseOrderEdits(id: string) {
+    return this.request.get(`${API_PATHS.DASHBOARD}/purchase-orders/${id}/edits`);
+  }
+
+  async getPurchaseOrderEmailLog(id: string) {
+    return this.request.get(`${API_PATHS.DASHBOARD}/purchase-orders/${id}/email-log`);
+  }
+
+  // ─── Sale Transactions ──────────────────────────────────
+
+  async getSaleTransactions(params: Record<string, string> = {}) {
+    return this.request.get(`${API_PATHS.DASHBOARD}/sales`, { params });
+  }
+
+  async createSaleTransaction(data: Record<string, unknown>) {
+    return this.request.post(`${API_PATHS.DASHBOARD}/sales`, { data });
+  }
+
+  async getSaleTransaction(id: string) {
+    return this.request.get(`${API_PATHS.DASHBOARD}/sales/${id}`);
+  }
 }
