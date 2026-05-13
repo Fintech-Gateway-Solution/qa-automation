@@ -181,4 +181,20 @@ export class ApiClient {
   async getWarehouses() {
     return this.request.get(`${API_PATHS.DASHBOARD}/warehouses`);
   }
+
+  async updateDashboardPayee(id: string, data: Record<string, unknown>) {
+    return this.request.put(`${API_PATHS.DASHBOARD}/payees/${id}`, { data });
+  }
+
+  async getDashboardPayee(id: string) {
+    return this.request.get(`${API_PATHS.DASHBOARD}/payees/${id}`);
+  }
+
+  async updatePurchaseOrder(id: string, data: Record<string, unknown>) {
+    return this.request.put(`${API_PATHS.DASHBOARD}/purchase-orders/${id}`, { data });
+  }
+
+  async receivePurchaseOrder(id: string) {
+    return this.request.post(`${API_PATHS.DASHBOARD}/purchase-orders/${id}/receive`);
+  }
 }
