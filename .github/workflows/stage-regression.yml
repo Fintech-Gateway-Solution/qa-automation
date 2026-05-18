@@ -1,0 +1,100 @@
+##
+# Stage Regression Suite
+#
+# Triggered automatically after any service deploys to stage (test branch).
+# Each service's deploy-test.yml fires a repository_dispatch event here
+# after a successful deployment, which runs the full regression suite
+# against finstage.qpaymentz.com.
+#
+# Also available for manual dispatch.
+##
+
+name: Stage Regression
+
+on:
+  repository_dispatch:
+    types: [stage-deploy-complete]
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'Base URL to test against'
+        default: 'https://finstage.qpaymentz.com'
+      service:
+        description: 'Service that triggered the run (informational)'
+        default: 'manual'
+
+concurrency:
+  group: stage-regression
+  cancel-in-progress: true
+
+env:
+  BASE_URL: ${{ github.event.client_payload.base_url || inputs.base_url || 'https://finstage.qpaymentz.com' }}
+
+jobs:
+  regression:
+    name: "Stage Regression (${{ github.event.client_payload.service || inputs.service || 'manual' }})"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log trigger info
+        run: |
+          echo "Triggered by: ${{ github.event.client_payload.service || inputs.service || 'manual' }}"
+          echo "Target: ${{ env.BASE_URL }}"
+          echo "Commit: ${{ github.event.client_payload.commit_sha || 'N/A' }}"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Wait for services to stabilize
+        run: |
+          echo "Waiting 30s for deployment to stabilize..."
+          sleep 30
+
+          MAX_RETRIES=6
+          for i in $(seq 1 $MAX_RETRIES); do
+            if curl -sf "${{ env.BASE_URL }}/auth-api/v1/health" > /dev/null 2>&1; then
+              echo "Services healthy on attempt $i"
+              break
+            fi
+            echo "Attempt $i/$MAX_RETRIES: services not ready, waiting 10s..."
+            sleep 10
+            if [ "$i" = "$MAX_RETRIES" ]; then
+              echo "WARNING: Health check didn't pass, running tests anyway"
+            fi
+          done
+
+      - name: Run regression tests
+        run: npx playwright test --project=regression
+        env:
+          BASE_URL: ${{ env.BASE_URL }}
+          TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
+          TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
+          CI: true
+
+      - name: Run smoke tests
+        if: always()
+        run: npx playwright test --project=smoke
+        env:
+          BASE_URL: ${{ env.BASE_URL }}
+          CI: true
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage-regression-${{ github.event.client_payload.service || 'manual' }}-${{ github.run_number }}
+          path: playwright-report/
+          retention-days: 14
