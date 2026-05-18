@@ -164,3 +164,48 @@ export function qaCardSaleTransaction() {
     notes: `QA card sale ${id}`,
   };
 }
+
+export function qaPaymentLink(customerId: string) {
+  return {
+    customerId,
+    amount: 25.0,
+    dueDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+    paymentMethod: 'ach',
+    notes: `QA payment link ${uniqueId()}`,
+  };
+}
+
+export function qaProductWithLocation(locationId: string) {
+  const id = uniqueId();
+  return {
+    name: `QA-Product-${id}`,
+    description: 'Test product with location pricing',
+    sku: `QASKU${id}`,
+    departmentId: undefined as string | undefined,
+    prices: [
+      {
+        locationId,
+        sellingPrice: '12.99',
+        cost: '6.50',
+      },
+    ],
+  };
+}
+
+export function qaAchSaleWithAuth() {
+  const id = uniqueId();
+  return {
+    amount: '30.00',
+    paymentMethod: 'ach',
+    authorizationType: 'web',
+    accountType: 'checking',
+    accountCategory: 'personal',
+    routingNumber: '021000021',
+    accountNumber: `300000${String(Date.now()).slice(-8)}`,
+    firstName: 'QA',
+    lastName: `AuthSale-${id}`,
+    phone: '5551234567',
+    email: `qa-authsale-${id}@test.local`,
+    notes: `QA ACH sale with auth ${id}`,
+  };
+}
