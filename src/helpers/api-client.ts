@@ -74,6 +74,18 @@ export class ApiClient {
     return this.request.get(`${API_PATHS.DASHBOARD}/health`);
   }
 
+  async getGlobalSettings() {
+    return this.request.get(`${API_PATHS.DASHBOARD}/settings`);
+  }
+
+  async adminToggleTenantModule(tenantId: string, moduleName: string, data: Record<string, unknown>) {
+    return this.request.put(`${API_PATHS.DASHBOARD}/admin/tenants/${tenantId}/modules/${moduleName}/toggle`, { data });
+  }
+
+  async getAdminTenant(tenantId: string) {
+    return this.request.get(`${API_PATHS.DASHBOARD}/admin/tenants/${tenantId}`);
+  }
+
   // ─── SendPayment ────────────────────────────────────────
 
   async getPayees() {
@@ -130,6 +142,18 @@ export class ApiClient {
     return this.request.get(`${API_PATHS.RECEIVEPAYMENT}/health`);
   }
 
+  async getPaymentLinks(params: Record<string, string> = {}) {
+    return this.request.get(`${API_PATHS.RECEIVEPAYMENT}/payment-links`, { params });
+  }
+
+  async createPaymentLink(data: Record<string, unknown>) {
+    return this.request.post(`${API_PATHS.RECEIVEPAYMENT}/payment-links`, { data });
+  }
+
+  async getSaleTransactionAuthDoc(saleId: string) {
+    return this.request.get(`${API_PATHS.DASHBOARD}/sales/${saleId}/auth-doc`);
+  }
+
   // ─── Products ───────────────────────────────────────────
 
   async getProducts() {
@@ -146,6 +170,18 @@ export class ApiClient {
 
   async healthProducts() {
     return this.request.get(`${API_PATHS.PRODUCTS}/health`);
+  }
+
+  async createProduct(data: Record<string, unknown>) {
+    return this.request.post(`${API_PATHS.PRODUCTS}/products`, { data });
+  }
+
+  async getProduct(id: string) {
+    return this.request.get(`${API_PATHS.PRODUCTS}/products/${id}`);
+  }
+
+  async deleteProduct(id: string) {
+    return this.request.delete(`${API_PATHS.PRODUCTS}/products/${id}`);
   }
 
   // ─── Purchase Orders ────────────────────────────────────
@@ -240,5 +276,33 @@ export class ApiClient {
 
   async getSaleTransaction(id: string) {
     return this.request.get(`${API_PATHS.DASHBOARD}/sales/${id}`);
+  }
+
+  // ─── POS ────────────────────────────────────────────────
+
+  async getPosConfig(locationId: string) {
+    return this.request.get(`${API_PATHS.DASHBOARD}/pos/tenant-config`, { params: { locationId } });
+  }
+
+  async updatePosConfig(data: Record<string, unknown>) {
+    return this.request.put(`${API_PATHS.DASHBOARD}/pos/tenant-config`, { data });
+  }
+
+  // ─── Health / Readiness ─────────────────────────────────
+
+  async healthReady(service: 'AUTH' | 'DASHBOARD' | 'SENDPAYMENT' | 'RECEIVEPAYMENT' | 'PRODUCTS') {
+    return this.request.get(`${API_PATHS[service]}/health/ready`);
+  }
+
+  // ─── ReceivePayment direct ──────────────────────────────
+
+  async getAchAuthSignedDoc(saleId: string) {
+    return this.request.get(`${API_PATHS.RECEIVEPAYMENT}/ach-authorizations/signed-document`, {
+      params: { saleId },
+    });
+  }
+
+  async getPaymentLink(id: string) {
+    return this.request.get(`${API_PATHS.RECEIVEPAYMENT}/payment-links/${id}`);
   }
 }
