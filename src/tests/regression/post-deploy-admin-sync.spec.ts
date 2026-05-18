@@ -15,14 +15,18 @@
  * SUPER_ADMIN_PASSWORD env vars, or skip if not available.
  */
 
-import { test as base, expect } from '@playwright/test';
+import { test as base, expect, TestInfo } from '@playwright/test';
 import { API_PATHS } from '../../helpers/constants';
 
 const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL;
 const SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD;
 
 const test = base.extend<{ superAdminRequest: any }>({
-  superAdminRequest: async ({ playwright, baseURL }, use, testInfo) => {
+  superAdminRequest: async (
+    { playwright, baseURL }: { playwright: any; baseURL: string | undefined },
+    use: (r: any) => Promise<void>,
+    testInfo: TestInfo,
+  ) => {
     if (!SUPER_ADMIN_EMAIL || !SUPER_ADMIN_PASSWORD) {
       testInfo.skip(true, 'SUPER_ADMIN_EMAIL / SUPER_ADMIN_PASSWORD not set — skipping admin sync tests');
       return;
