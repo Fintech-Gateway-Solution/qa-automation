@@ -287,4 +287,22 @@ export class ApiClient {
   async updatePosConfig(data: Record<string, unknown>) {
     return this.request.put(`${API_PATHS.DASHBOARD}/pos/tenant-config`, { data });
   }
+
+  // ─── Health / Readiness ─────────────────────────────────
+
+  async healthReady(service: 'AUTH' | 'DASHBOARD' | 'SENDPAYMENT' | 'RECEIVEPAYMENT' | 'PRODUCTS') {
+    return this.request.get(`${API_PATHS[service]}/health/ready`);
+  }
+
+  // ─── ReceivePayment direct ──────────────────────────────
+
+  async getAchAuthSignedDoc(saleId: string) {
+    return this.request.get(`${API_PATHS.RECEIVEPAYMENT}/ach-authorizations/signed-document`, {
+      params: { saleId },
+    });
+  }
+
+  async getPaymentLink(id: string) {
+    return this.request.get(`${API_PATHS.RECEIVEPAYMENT}/payment-links/${id}`);
+  }
 }
